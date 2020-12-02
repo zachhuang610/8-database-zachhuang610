@@ -2,12 +2,39 @@ Questions
 
 1. Consider the thread created in start_listener. How many threads with this functionality should be running on the server at any given time?
 
+Answer: one thread since pthread_create is only called once in start_listener. 
+
 2. In the listener function, what do each of the following fields of the sockaddr_in struct represent: sin_family, sin_port, and sin_addr.s_addr?
+
+Answer: 
+    sin_family - represents the type of sockets that the socket can communicate with. in this case it is IPv4.
+    sin_port - represents the server port
+    sin_port - represents the server internet address
 
 3. What is the purpose of each of the following function calls in listener: socket, bind, listen, and accept? You should explain what each call does and what the effect would be if it were not called.
 
+Answer:
+    socket - creates a socket for the server. Without this call no client could connect to the server since it doesn't have a socket
+    bind - links the name of a socket to a socket. Without this we can't call listen and accept on the socket and thus can't put
+            the socket into listening mode, and thus can't receive connections from clients.
+    listen - puts the socket in listening mode. Without this, the server socket exists but cannot receive any connections from clients
+    accept - pulls the first socket from the queue and assigns it to a file descriptor. Without this we cannot act on incoming client connections
+
 4. Which protocol (TCP or UDP) is used for communication? Why is this protocol used? (Hint: see line 34 in comm.c)
+
+Answer: TCP is used because we have are trying to modify a database and want to know the status of our sent data.
 
 5. Describe what comm_serve does. How are the response and command parameters used? What would happen if the stream pointed to by cxstr were closed?
 
+Answer: comm_serve takes in a file descriptor cxstr and writes response to the stream and reads command from the stream. if the stream is closed, it means that the connection to the client
+        has been terminated, so it will print an error and return -1 as an error value. 
+
 6. Describe, in detail, what happens during each iteration of the while loop in the listener function. Be sure to include explanations of all significant function calls.
+
+Answer: 1.) accepts a socket and stores the name to csock using accept, which removes the first connection off the queue, creates a new connected socket, 
+            and returns a file descriptor to it, which is stores it in csock, storing the address and length in client_addr and client_len. If accept errors
+            an informative message is printed. 
+        2.) prints an informative message about the client address and port by accessing information stored in client_addr, which is converted from the network
+            format to a binary address. 
+        3.) opens the socket and stores the file stream pointer in cxstr. prints an error and closes the stream if there is an error with opening with R/W permissions.
+        4.) calls server on cxstr, which handles the connected socket's requests.
