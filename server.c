@@ -146,11 +146,10 @@ void *run_client(void *arg) {
         }
         pthread_exit(0);
         client_destructor(arg);
-    } else {
-        pthread_exit(0);
-    }
+    } 
     // Step 4: When the client is done sending commands, exit the thread
     //       cleanly.
+    pthread_exit(0);
     //
     // Keep stop and go in mind when writing this function!
     return NULL;
@@ -198,10 +197,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Usage: port\n");
         exit(1);
     }
-
     int port = atoi(argv[1]);
-
-
     int err;
     // TODO:
     // Step 1: Set up the signal handler.
@@ -216,7 +212,7 @@ int main(int argc, char *argv[]) {
 
     // Step 3: Start a listener thread for clients (see start_listener in
     //       comm.c).
-    pthread_t tid = start_listener(port, client_constructor);
+    pthread_t tid = start_listener(port, ( (void(*)(FILE *)) client_constructor) );
     if (tid != 0) {
         fprintf(stderr, "tid: %li\n", tid);
     }
