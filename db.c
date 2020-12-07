@@ -86,11 +86,16 @@ node_t *node_constructor(char *arg_name, char *arg_value, node_t *arg_left,
     if (err != 0) {
         handle_error_en(err, "pthread_rwlock_init");
     }
+    lock(l_write, new_node->lock);
     return new_node;
 }
 
 void node_destructor(node_t *node) {
-    pthread_rwlock_destroy(node->lock);
+    unlock(node->lock);
+    int err = pthread_rwlock_destroy(node->lock);
+    if (err != 0) {
+        handle_error_en(err, "pthread_rwlock_destroy");
+    }
     if (node->name != 0) free(node->name);
     if (node->value != 0) free(node->value);
     if (node->lock != 0) free(node->lock);
@@ -132,6 +137,7 @@ int db_add(char *name, char *value) {
         parent->lchild = newnode;
     else
         parent->rchild = newnode;
+    unlock(newnode->lock);
     unlock(parent->lock);
     return (1);
 }
@@ -153,23 +159,21 @@ int db_remove(char *name) {
     // right child, then we can merely replace its parent's pointer to
     // it with the node's left child.
 
-    if (dnode->rchild == 0) {
+    if (dnode->rchild == NULL) {
         if (strcmp(dnode->name, parent->name) < 0)
             parent->lchild = dnode->lchild;
         else
             parent->rchild = dnode->lchild;
         unlock(parent->lock);
-        unlock(dnode->lock);
         // done with dnode
         node_destructor(dnode);
-    } else if (dnode->lchild == 0) {
+    } else if (dnode->lchild == NULL) {
         // ditto if the node had no left child
         if (strcmp(dnode->name, parent->name) < 0)
             parent->lchild = dnode->rchild;
         else
             parent->rchild = dnode->rchild;
         unlock(parent->lock);
-        unlock(dnode->lock);
         // done with dnode
         node_destructor(dnode);
     } else {
@@ -197,10 +201,10 @@ int db_remove(char *name) {
         snprintf(dnode->name, MAXLEN, "%s", next->name);
         snprintf(dnode->value, MAXLEN, "%s", next->value);
         *pnext = next->rchild;
-        unlock(next->lock);
-        unlock(parent->lock);
-        unlock(dnode->lock);
         node_destructor(next);
+        unlock(dnode->lock);
+        unlock(parent->lock);
+        
     }
     return (1);
 }
