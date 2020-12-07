@@ -157,15 +157,22 @@ void *run_client(void *arg) {
         int err;
         // Step 2: Add client to the client list and push thread_cleanup to
         // remove it if the thread is canceled.
-        pthread_mutex_lock(&s_controller.server_mutex);
-        s_controller.num_client_threads++;
-        pthread_mutex_unlock(&s_controller.server_mutex);
-        c->prev = NULL;
-        err = pthread_mutex_lock(&thread_list_mutex);
-        c->next = thread_list_head;
+        err = pthread_mutex_lock(&s_controller.server_mutex);
         if (err != 0) {
             handle_error_en(err, "pthread_mutex_lock");
         }
+        s_controller.num_client_threads++;
+        err = pthread_mutex_unlock(&s_controller.server_mutex);
+        if (err != 0) {
+            handle_error_en(err, "pthread_mutex_unlock");
+        }
+        c->prev = NULL;
+        err = pthread_mutex_lock(&thread_list_mutex);
+        if (err != 0) {
+            handle_error_en(err, "pthread_mutex_lock");
+        }
+        c->next = thread_list_head;
+        
         thread_list_head = c;
         err = pthread_mutex_unlock(&thread_list_mutex);
         if (err != 0) {
@@ -176,12 +183,10 @@ void *run_client(void *arg) {
         //       responses. Execute commands using interpret_command (in db.c)
         char response[256];
         char command[256];
-        response[0] = '\0';
-        int err = 0;
-        while (err == 0) {
-            err = comm_serve(c->cxstr, response, command);
+        response[0] = 0;
+        while (comm_serve(c->cxstr, response, command) == 0) {
             client_control_wait();
-            interpret_command(command, response, 256*sizeof(char));
+            interpret_command(command, response, 256);
         }
         pthread_cleanup_pop(1);
     }

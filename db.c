@@ -184,13 +184,13 @@ int db_remove(char *name) {
 
         next = dnode->rchild;
         lock(l_write, next->lock);
-        node_t **pnext = &next;
+        node_t **pnext = &dnode->rchild;
         while (next->lchild != NULL) {
             // work our way down the lchild chain, finding the smallest node
             // in the subtree.
             node_t *nextl = next->lchild;
             lock(l_write, nextl->lock);
-            pnext = &nextl;
+            pnext = &nextl->lchild;
             unlock(next->lock);
             next = nextl;
         }
