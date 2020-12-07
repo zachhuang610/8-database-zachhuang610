@@ -1,0 +1,17 @@
+(root)
+ (null)
+ n0 v0
+  (null)
+  n2 v2
+   n1 v1
+    (null)
+    (null)
+   n4 v4
+    n3 v3
+     (null)
+     (null)
+    n5 v5
+     (null)
+     n6 v6
+      (null)
+      (null)
