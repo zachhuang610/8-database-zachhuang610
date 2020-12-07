@@ -290,12 +290,7 @@ void db_print_recurs(node_t *node, int lvl, FILE *out) {
 
     db_print_recurs(left, lvl + 1, out);
     db_print_recurs(right, lvl + 1, out);
-    if (left != NULL) {
-        unlock(left->lock);
-    }
-    if (right != NULL) {
-        unlock(right->lock);
-    }
+
     unlock(node->lock);
 }
 

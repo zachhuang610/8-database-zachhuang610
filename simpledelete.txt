@@ -1,7 +1,7 @@
-d node2
-d node1
-d node3
-d node6
-d node5
-d node4
-d node0
+d n2
+d n1
+d n3
+d n6
+d n5
+d n4
+d n0
