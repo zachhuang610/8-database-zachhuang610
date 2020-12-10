@@ -402,6 +402,7 @@ int main(int argc, char *argv[]) {
     // Step 5: Destroy the signal handler, delete all clients, cleanup the
     //       database, cancel and join with the listener thread
     //
+    fprintf(stdout, "exiting database\n");
     sig_handler_destructor(sh);
     delete_all();
     err = pthread_mutex_lock(&s_controller.server_mutex);
@@ -410,7 +411,8 @@ int main(int argc, char *argv[]) {
     }
     s_controller.is_open = 0;
     while (s_controller.num_client_threads != 0) {
-        pthread_cond_wait(&s_controller.server_cond, &s_controller.server_mutex);
+        pthread_cond_wait(&s_controller.server_cond,
+                          &s_controller.server_mutex);
         if (err != 0) {
             handle_error_en(err, "pthread_cond_wait");
         }
@@ -436,6 +438,5 @@ int main(int argc, char *argv[]) {
     // happens in a call to delete_all() and ensure that there is no way for a
     // thread to add itself to the thread list after the server's final
     // delete_all().
-    fprintf(stdout, "exiting database\n");
     return 0;
 }
