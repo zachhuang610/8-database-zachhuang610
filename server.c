@@ -23,6 +23,7 @@ typedef struct server_control {
     pthread_mutex_t server_mutex;
     pthread_cond_t server_cond;
     int num_client_threads;
+    int is_open;
 } server_control_t;
 
 /*
@@ -60,10 +61,8 @@ typedef struct sig_handler {
 client_t *thread_list_head = NULL;
 pthread_mutex_t thread_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-int is_open = 1;
-
 server_control_t s_controller = {PTHREAD_MUTEX_INITIALIZER,
-                                 PTHREAD_COND_INITIALIZER, 0};
+                                 PTHREAD_COND_INITIALIZER, 0, 1};
 
 client_control_t c_controller = {PTHREAD_MUTEX_INITIALIZER,
                                  PTHREAD_COND_INITIALIZER, 0};
@@ -77,7 +76,8 @@ void client_control_wait() {
     // TODO: Block the calling thread until the main thread calls
     // client_control_release(). See the client_control_t struct.
     pthread_mutex_lock(&c_controller.go_mutex);
-    pthread_cleanup_push((void (*)) pthread_mutex_unlock, &( c_controller.go_mutex));
+    pthread_cleanup_push((void(*))pthread_mutex_unlock,
+                         &(c_controller.go_mutex));
     while (c_controller.stopped == 1) {
         pthread_cond_wait(&c_controller.go, &c_controller.go_mutex);
     }
@@ -153,10 +153,26 @@ void *run_client(void *arg) {
     // TODO:
     // Step 1: Make sure that the server is still accepting clients.
     struct client *c = (struct client *)arg;
-    if (is_open) {
+    if (s_controller.is_open) {
         int err;
         // Step 2: Add client to the client list and push thread_cleanup to
         // remove it if the thread is canceled.
+
+        c->prev = NULL;
+        err = pthread_mutex_lock(&thread_list_mutex);
+        if (err != 0) {
+            handle_error_en(err, "pthread_mutex_lock");
+        }
+        c->next = thread_list_head;
+        if (thread_list_head != NULL) {
+            thread_list_head->prev = c;
+        } 
+        thread_list_head = c;
+        err = pthread_mutex_unlock(&thread_list_mutex);
+        if (err != 0) {
+            handle_error_en(err, "pthread_mutex_unlock");
+        }
+
         err = pthread_mutex_lock(&s_controller.server_mutex);
         if (err != 0) {
             handle_error_en(err, "pthread_mutex_lock");
@@ -166,18 +182,7 @@ void *run_client(void *arg) {
         if (err != 0) {
             handle_error_en(err, "pthread_mutex_unlock");
         }
-        c->prev = NULL;
-        err = pthread_mutex_lock(&thread_list_mutex);
-        if (err != 0) {
-            handle_error_en(err, "pthread_mutex_lock");
-        }
-        c->next = thread_list_head;
-        
-        thread_list_head = c;
-        err = pthread_mutex_unlock(&thread_list_mutex);
-        if (err != 0) {
-            handle_error_en(err, "pthread_mutex_unlock");
-        }
+
         pthread_cleanup_push(thread_cleanup, c);
         // Step 3: Loop comm_serve (in comm.c) to receive commands and output
         //       responses. Execute commands using interpret_command (in db.c)
@@ -206,14 +211,19 @@ void delete_all() {
     if (err != 0) {
         handle_error_en(err, "pthread_mutex_lock");
     }
-    while (thread_list_head != NULL) {
-        client_t *n = thread_list_head->next;
+    for (client_t * client = thread_list_head; client != NULL; client = client->next)
+    {
         err = pthread_cancel(thread_list_head->thread);
         if (err != 0) {
             handle_error_en(err, "pthread_cancel");
         }
-        thread_list_head = n;
     }
+    
+    // while (thread_list_head != NULL) {
+    //     client_t *n = thread_list_head->next;
+        
+    //     thread_list_head = n;
+    // }
     err = pthread_mutex_unlock(&thread_list_mutex);
     if (err != 0) {
         handle_error_en(err, "pthread_mutex_unlock");
@@ -231,22 +241,32 @@ void thread_cleanup(void *arg) {
     if (err != 0) {
         handle_error_en(err, "pthread_mutex_lock");
     }
-    if (arg == thread_list_head) {
+    client_t *n = c->next;
+    client_t *p = c->prev;
+    if (n != NULL) {
+        n->prev = p;
+    }
+    
+    if (c == thread_list_head) {
         thread_list_head = c->next;
-        if (thread_list_head != NULL) {
-            thread_list_head->prev = NULL;
-        }
+        // if (thread_list_head != NULL) {
+        //     thread_list_head->prev = NULL;
+        // }
     } else {
-        client_t *p = c->prev;
-        client_t *n = c->next;
         if (p != NULL) {
             p->next = n;
         }
-        if (n != NULL) {
-            n->prev = p;
-        }
     }
     err = pthread_mutex_unlock(&thread_list_mutex);
+    if (err != 0) {
+        handle_error_en(err, "pthread_mutex_unlock");
+    }
+    err = pthread_mutex_lock(&s_controller.server_mutex);
+    if (err != 0) {
+        handle_error_en(err, "pthread_mutex_lock");
+    }
+    s_controller.num_client_threads--;
+    err = pthread_mutex_unlock(&s_controller.server_mutex);
     if (err != 0) {
         handle_error_en(err, "pthread_mutex_unlock");
     }
@@ -345,7 +365,7 @@ int main(int argc, char *argv[]) {
             break;
         }
 
-        char cmd[2]; 
+        char cmd[2];
         cmd[0] = line[0];
         cmd[1] = '\0';
         char *dest = line + 1;
@@ -362,8 +382,14 @@ int main(int argc, char *argv[]) {
     //       database, cancel and join with the listener thread
     //
     sig_handler_destructor(sh);
-    is_open = 0;
+    pthread_mutex_lock(&s_controller.server_mutex);
+    if (err != 0) {
+        handle_error_en(err, "pthread_lock");
+    }
+    s_controller.is_open = 0;
     delete_all();
+    pthread_mutex_unlock(&s_controller.server_mutex);
+    
     assert(thread_list_head == NULL);
 
     err = pthread_cancel(l_tid);

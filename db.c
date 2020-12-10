@@ -86,7 +86,6 @@ node_t *node_constructor(char *arg_name, char *arg_value, node_t *arg_left,
     if (err != 0) {
         handle_error_en(err, "pthread_rwlock_init");
     }
-    lock(l_write, new_node->lock);
     return new_node;
 }
 
@@ -137,7 +136,6 @@ int db_add(char *name, char *value) {
         parent->lchild = newnode;
     else
         parent->rchild = newnode;
-    unlock(newnode->lock);
     unlock(parent->lock);
     return (1);
 }
@@ -152,6 +150,7 @@ int db_remove(char *name) {
     lock(l_write, head.lock);
     if ((dnode = search(name, &head, &parent, l_write)) == 0) {
         // it's not there
+        unlock(parent->lock);
         return (0);
     }
 
@@ -159,22 +158,24 @@ int db_remove(char *name) {
     // right child, then we can merely replace its parent's pointer to
     // it with the node's left child.
 
-    if (dnode->rchild == NULL) {
+    if (dnode->rchild == 0) {
         if (strcmp(dnode->name, parent->name) < 0)
             parent->lchild = dnode->lchild;
         else
             parent->rchild = dnode->lchild;
-        unlock(parent->lock);
+
         // done with dnode
+        unlock(parent->lock);
         node_destructor(dnode);
-    } else if (dnode->lchild == NULL) {
+    } else if (dnode->lchild == 0) {
         // ditto if the node had no left child
         if (strcmp(dnode->name, parent->name) < 0)
             parent->lchild = dnode->rchild;
         else
             parent->rchild = dnode->rchild;
-        unlock(parent->lock);
+
         // done with dnode
+        unlock(parent->lock);
         node_destructor(dnode);
     } else {
         // Find the lexicographically smallest node in the right subtree and
@@ -183,14 +184,14 @@ int db_remove(char *name) {
         // greater than all nodes in its left subtree
 
         next = dnode->rchild;
-        lock(l_write, next->lock);
         node_t **pnext = &dnode->rchild;
-        while (next->lchild != NULL) {
+        lock(l_write, next->lock);
+        while (next->lchild != 0) {
             // work our way down the lchild chain, finding the smallest node
             // in the subtree.
             node_t *nextl = next->lchild;
             lock(l_write, nextl->lock);
-            pnext = &nextl->lchild;
+            pnext = &next->lchild;
             unlock(next->lock);
             next = nextl;
         }
@@ -204,8 +205,8 @@ int db_remove(char *name) {
         node_destructor(next);
         unlock(dnode->lock);
         unlock(parent->lock);
-        
     }
+
     return (1);
 }
 
@@ -282,7 +283,7 @@ void db_print_recurs(node_t *node, int lvl, FILE *out) {
     } else {
         fprintf(out, "%s %s\n", node->name, node->value);
     }
-    
+
     node_t *left = node->lchild;
     node_t *right = node->rchild;
     if (left != NULL) {
@@ -300,6 +301,7 @@ void db_print_recurs(node_t *node, int lvl, FILE *out) {
 
 int db_print(char *filename) {
     FILE *out;
+    lock(l_read, head.lock);
     if (filename == NULL) {
         db_print_recurs(&head, 0, stdout);
         return 0;
@@ -319,7 +321,6 @@ int db_print(char *filename) {
         return -1;
     }
 
-    lock(l_read, head.lock);
     db_print_recurs(&head, 0, out);
     fclose(out);
 
