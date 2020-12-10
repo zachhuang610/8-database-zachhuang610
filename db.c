@@ -15,6 +15,7 @@
 pthread_rwlock_t root_lock = PTHREAD_RWLOCK_INITIALIZER;
 node_t head = {"", "", 0, 0, &root_lock};
 
+// function for locking a node rwlock and error-checking
 static inline void lock(locktype_t lt, pthread_rwlock_t *lk) {
     int err;
     if (lt == l_read) {
@@ -30,6 +31,7 @@ static inline void lock(locktype_t lt, pthread_rwlock_t *lk) {
     }
 }
 
+// function for unlocking a node rwlock and error-checking
 static inline void unlock(pthread_rwlock_t *lk) {
     int err;
     err = pthread_rwlock_unlock(lk);
@@ -38,6 +40,7 @@ static inline void unlock(pthread_rwlock_t *lk) {
     }
 }
 
+// function for creating a node given field values
 node_t *node_constructor(char *arg_name, char *arg_value, node_t *arg_left,
                          node_t *arg_right) {
     size_t name_len = strlen(arg_name);
@@ -89,6 +92,7 @@ node_t *node_constructor(char *arg_name, char *arg_value, node_t *arg_left,
     return new_node;
 }
 
+// function for destroying a node. Unlocks and destroys rwlock before freeing node
 void node_destructor(node_t *node) {
     unlock(node->lock);
     int err = pthread_rwlock_destroy(node->lock);
@@ -101,6 +105,7 @@ void node_destructor(node_t *node) {
     free(node);
 }
 
+// function for returning a node value if it exists given a node name
 void db_query(char *name, char *result, int len) {
     // TODO: Make this thread-safe!
     node_t *target;
@@ -117,6 +122,7 @@ void db_query(char *name, char *result, int len) {
     }
 }
 
+// function for adding a node value to the BST if it isn't in the BST
 int db_add(char *name, char *value) {
     // TODO: Make this thread-safe!
     node_t *parent;
@@ -210,6 +216,8 @@ int db_remove(char *name) {
     return (1);
 }
 
+// function for searching through the BST, returns the node if it exists and also
+// stores the parent of the node if the caller wants the parent
 node_t *search(char *name, node_t *parent, node_t **parentpp, locktype_t lt) {
     // Search the tree, starting at parent, for a node containing
     // name (the "target node").  Return a pointer to the node,
@@ -261,6 +269,7 @@ node_t *search(char *name, node_t *parent, node_t **parentpp, locktype_t lt) {
     return result;
 }
 
+// function for printing spaces
 static inline void print_spaces(int lvl, FILE *out) {
     for (int i = 0; i < lvl; i++) {
         fprintf(out, " ");
@@ -299,6 +308,7 @@ void db_print_recurs(node_t *node, int lvl, FILE *out) {
     unlock(node->lock);
 }
 
+// function for printing the BST
 int db_print(char *filename) {
     FILE *out;
     lock(l_read, head.lock);
@@ -339,11 +349,14 @@ void db_cleanup_recurs(node_t *node) {
     node_destructor(node);
 }
 
+// cleans up the database, calls db_cleanup_recur
 void db_cleanup() {
     db_cleanup_recurs(head.lchild);
     db_cleanup_recurs(head.rchild);
 }
 
+// function for interpreting client inputs to call the corresponding BST function
+// to manage the BST
 void interpret_command(char *command, char *response, int len) {
     char value[MAXLEN];
     char ibuf[MAXLEN];

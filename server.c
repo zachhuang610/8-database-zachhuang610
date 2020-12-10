@@ -162,6 +162,7 @@ void client_constructor(FILE *cxstr) {
     }
 }
 
+// called by thread_cleanup. Shuts down the socket and frees client memory
 void client_destructor(client_t *client) {
     // TODO: Free and close all resources associated with a client.
     // Whatever was malloc'd in client_constructor should
@@ -225,6 +226,7 @@ void *run_client(void *arg) {
     return NULL;
 }
 
+// sends a cancellation signal to each thread in the thread list
 void delete_all() {
     // TODO: Cancel every thread in the client thread list with the
     // pthread_cancel function.
@@ -317,6 +319,7 @@ void *monitor_signal(void *arg) {
     return NULL;
 }
 
+// creates the thread that handles signals
 sig_handler_t *sig_handler_constructor() {
     // TODO: Create a thread to handle SIGINT. The thread that this function
     // creates should be the ONLY thread that ever responds to SIGINT.
@@ -342,6 +345,7 @@ sig_handler_t *sig_handler_constructor() {
     return sh;
 }
 
+// destroys the signal-handler thread by cancelling, joining, and freeing
 void sig_handler_destructor(sig_handler_t *sighandler) {
     // TODO: Free any resources allocated in sig_handler_constructor.
     // Cancel and join with the signal handler's thread.
