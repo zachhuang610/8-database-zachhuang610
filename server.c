@@ -75,11 +75,17 @@ void thread_cleanup(void *arg);
 void client_control_wait() {
     // TODO: Block the calling thread until the main thread calls
     // client_control_release(). See the client_control_t struct.
-    pthread_mutex_lock(&c_controller.go_mutex);
+    int err = pthread_mutex_lock(&c_controller.go_mutex);
+    if (err != 0) {
+        handle_error_en(err, "pthread_mutex_lock");
+    }
     pthread_cleanup_push((void(*))pthread_mutex_unlock,
                          &(c_controller.go_mutex));
     while (c_controller.stopped == 1) {
         pthread_cond_wait(&c_controller.go, &c_controller.go_mutex);
+        if (err != 0) {
+            handle_error_en(err, "pthread_cond_wait");
+        }
     }
     pthread_cleanup_pop(1);
 }
@@ -88,27 +94,43 @@ void client_control_wait() {
 void client_control_stop() {
     // TODO: Ensure that the next time client threads call client_control_wait()
     // at the top of the event loop in run_client, they will block.
-    pthread_mutex_lock(&c_controller.go_mutex);
+    int err = pthread_mutex_lock(&c_controller.go_mutex);
+    if (err != 0) {
+        handle_error_en(err, "pthread_mutex_lock");
+    }
     c_controller.stopped = 1;
-    int err = fprintf(stderr, "stopping all clients\n");
+    err = fprintf(stderr, "stopping all clients\n");
     if (err < 0) {
         perror("fprintf");
     }
-    pthread_mutex_unlock(&c_controller.go_mutex);
+    err = pthread_mutex_unlock(&c_controller.go_mutex);
+    if (err != 0) {
+        handle_error_en(err, "pthread_mutex_unlock");
+    }
 }
 
 // Called by main thread to resume client threads
 void client_control_release() {
     // TODO: Allow clients that are blocked within client_control_wait()
     // to continue. See the client_control_t struct.
-    pthread_mutex_lock(&c_controller.go_mutex);
+    int err;
+    err = pthread_mutex_lock(&c_controller.go_mutex);
+    if (err != 0) {
+        handle_error_en(err, "pthread_mutex_lock");
+    }
     c_controller.stopped = 0;
-    int err = fprintf(stderr, "releasing all clients\n");
+    err = fprintf(stderr, "releasing all clients\n");
     if (err < 0) {
         perror("fprintf");
     }
-    pthread_cond_broadcast(&c_controller.go);
-    pthread_mutex_unlock(&c_controller.go_mutex);
+    err = pthread_cond_broadcast(&c_controller.go);
+    if (err != 0) {
+        handle_error_en(err, "pthread_cond_wait");
+    }
+    err = pthread_mutex_unlock(&c_controller.go_mutex);
+    if (err != 0) {
+        handle_error_en(err, "pthread_mutex_unlock");
+    }
 }
 
 // Called by listener (in comm.c) to create a new client thread
@@ -166,7 +188,7 @@ void *run_client(void *arg) {
         c->next = thread_list_head;
         if (thread_list_head != NULL) {
             thread_list_head->prev = c;
-        } 
+        }
         thread_list_head = c;
         err = pthread_mutex_unlock(&thread_list_mutex);
         if (err != 0) {
@@ -211,19 +233,13 @@ void delete_all() {
     if (err != 0) {
         handle_error_en(err, "pthread_mutex_lock");
     }
-    for (client_t * client = thread_list_head; client != NULL; client = client->next)
-    {
+    for (client_t *client = thread_list_head; client != NULL;
+         client = client->next) {
         err = pthread_cancel(thread_list_head->thread);
         if (err != 0) {
             handle_error_en(err, "pthread_cancel");
         }
     }
-    
-    // while (thread_list_head != NULL) {
-    //     client_t *n = thread_list_head->next;
-        
-    //     thread_list_head = n;
-    // }
     err = pthread_mutex_unlock(&thread_list_mutex);
     if (err != 0) {
         handle_error_en(err, "pthread_mutex_unlock");
@@ -246,12 +262,9 @@ void thread_cleanup(void *arg) {
     if (n != NULL) {
         n->prev = p;
     }
-    
+
     if (c == thread_list_head) {
         thread_list_head = c->next;
-        // if (thread_list_head != NULL) {
-        //     thread_list_head->prev = NULL;
-        // }
     } else {
         if (p != NULL) {
             p->next = n;
@@ -261,11 +274,19 @@ void thread_cleanup(void *arg) {
     if (err != 0) {
         handle_error_en(err, "pthread_mutex_unlock");
     }
+
+    // decrement thread counter
     err = pthread_mutex_lock(&s_controller.server_mutex);
     if (err != 0) {
         handle_error_en(err, "pthread_mutex_lock");
     }
     s_controller.num_client_threads--;
+    if (s_controller.num_client_threads == 0) {
+        err = pthread_cond_signal(&s_controller.server_cond);
+        if (err != 0) {
+            handle_error_en(err, "pthread_cond_signal");
+        }
+    }
     err = pthread_mutex_unlock(&s_controller.server_mutex);
     if (err != 0) {
         handle_error_en(err, "pthread_mutex_unlock");
@@ -382,15 +403,25 @@ int main(int argc, char *argv[]) {
     //       database, cancel and join with the listener thread
     //
     sig_handler_destructor(sh);
-    pthread_mutex_lock(&s_controller.server_mutex);
+    delete_all();
+    err = pthread_mutex_lock(&s_controller.server_mutex);
     if (err != 0) {
         handle_error_en(err, "pthread_lock");
     }
     s_controller.is_open = 0;
-    delete_all();
+    while (s_controller.num_client_threads != 0) {
+        pthread_cond_wait(&s_controller.server_cond, &s_controller.server_mutex);
+        if (err != 0) {
+            handle_error_en(err, "pthread_cond_wait");
+        }
+    }
     pthread_mutex_unlock(&s_controller.server_mutex);
-    
+    if (err != 0) {
+        handle_error_en(err, "pthread_unlock");
+    }
     assert(thread_list_head == NULL);
+
+    db_cleanup();
 
     err = pthread_cancel(l_tid);
     if (err != 0) {
