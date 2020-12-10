@@ -13,6 +13,7 @@ typedef struct node {
 
 extern node_t head;
 
+// lock_type for locking in db.c
 typedef enum locktype { l_read, l_write } locktype_t;
 
 node_t *search(char *name, node_t *parent, node_t **parentp, locktype_t lt);

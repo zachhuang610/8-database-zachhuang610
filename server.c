@@ -237,7 +237,7 @@ void delete_all() {
     }
     for (client_t *client = thread_list_head; client != NULL;
          client = client->next) {
-        err = pthread_cancel(thread_list_head->thread);
+        err = pthread_cancel(client->thread);
         if (err != 0) {
             handle_error_en(err, "pthread_cancel");
         }
