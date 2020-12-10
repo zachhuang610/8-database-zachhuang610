@@ -406,7 +406,6 @@ int main(int argc, char *argv[]) {
     // Step 5: Destroy the signal handler, delete all clients, cleanup the
     //       database, cancel and join with the listener thread
     //
-    fprintf(stdout, "exiting database\n");
     sig_handler_destructor(sh);
     delete_all();
     err = pthread_mutex_lock(&s_controller.server_mutex);
@@ -426,7 +425,7 @@ int main(int argc, char *argv[]) {
         handle_error_en(err, "pthread_unlock");
     }
     assert(thread_list_head == NULL);
-
+    fprintf(stdout, "exiting database\n");
     db_cleanup();
 
     err = pthread_cancel(l_tid);
